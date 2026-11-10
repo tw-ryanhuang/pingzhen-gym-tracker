@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "pingzhen-gym",
-      "database_id": "REQUIRED_EXISTING_D1_DATABASE_ID"
+      "database_id": "b8a840b8-1fe2-4dbf-b8ce-5c7981a0a18b"
     }
   ]
 }
