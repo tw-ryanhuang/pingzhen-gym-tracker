@@ -1,3 +1,5 @@
+import {render} from '../src/ui/pages.js';
+import {pwaResponse} from '../src/pwa.js';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -5,8 +7,8 @@ const source=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 function harness(ms,responses,existing=false){
  const writes=[];let calls=0;
  class FixedDate extends Date{constructor(...a){super(...(a.length?a:[ms]));}static now(){return ms;}}
- const sandbox={Date:FixedDate,Response,Request,URL,AbortSignal,console,setTimeout:f=>{f();return 1},fetch:async()=>{const v=responses[calls++];if(v instanceof Error)throw v;return new Response('<span id="total_num_534" data-to="'+v+'">'+v+'人</span>');}};
- vm.createContext(sandbox);vm.runInContext(source.replace('export default {','globalThis.worker = {'),sandbox);
+ const sandbox={render,pwaResponse,Date:FixedDate,Response,Request,URL,AbortSignal,console,setTimeout:f=>{f();return 1},fetch:async()=>{const v=responses[calls++];if(v instanceof Error)throw v;return new Response('<span id="total_num_534" data-to="'+v+'">'+v+'人</span>');}};
+ vm.createContext(sandbox);vm.runInContext(source.replace(/^import .*;$/gm,'').replace('export default {','globalThis.worker = {'),sandbox);
  const DB={prepare(sql){return {bind(...values){this.values=values;return this},async run(){writes.push({sql,values:this.values});return {meta:{changes:existing?0:1}}},async all(){return {results:[]}}}},async batch(){return [[],[],[],[],[]].map(results=>({results}));}};
  return {sandbox,writes,env:{DB},calls:()=>calls,run:()=>sandbox.collect({DB},ms)};
 }
@@ -22,8 +24,12 @@ const h=harness(at('07:15:00'),[]);const response=await h.sandbox.worker.fetch(n
 assert.equal((await h.sandbox.worker.fetch(new Request('https://test/',{method:'POST'}),h.env)).status,405);
 // Exercise generated browser code without a browser engine.
 class Element{constructor(){this.children=[];this.textContent='';this.value='';this.dataset={};this.style={};}append(...e){this.children.push(...e);if(!this.value&&e[0]?.value)this.value=e[0].value;}setAttribute(k,v){this[k]=v;}replaceChildren(){this.children=[];}addEventListener(){}}
-const els={};const document={hidden:false,getElementById(id){return els[id]??=new Element()},querySelector(){return els.unit??=new Element()},createElement:()=>new Element(),createElementNS:()=>new Element(),addEventListener(){}};
+const els={};const document={hidden:false,getElementById(id){return els[id]??=new Element()},body:{dataset:{}},querySelector(){return els.unit??=new Element()},createElement:()=>new Element(),createElementNS:()=>new Element(),addEventListener(){}};
 const raw=JSON.parse(html.match(/type="application\/json">([\s\S]*?)<\/script>/)[1]);raw.now=at('23:00:00');raw.today=[{slot:new Date(at('06:00:00')).toISOString(),fetched_at:new Date(at('06:00:00')).toISOString(),hour:6,minute:0,count:9,status:'ok'}];raw.latest=raw.today;document.getElementById('data').textContent=JSON.stringify(raw);
-vm.runInNewContext(script,{document,window:{addEventListener(){}},location:{reload(){}},setInterval(){},Date,Map,Set,JSON,Math,String,Number});assert.equal(els.count.textContent,'已閉館');assert(els.unit.hidden);assert.equal(els['today-chart'].children.length,1);assert.equal(els.chart.children.length,32);
+vm.runInNewContext(script,{document,window:{addEventListener(){}},location:{reload(){}},navigator:{onLine:true},setInterval(){},Date,Map,Set,JSON,Math,String,Number});assert.equal(els.count.textContent,'已閉館');assert(els.unit.hidden);assert.equal(els['today-chart'].children.length,1);assert(!html.includes('id="popular"'));
+const overview=await (await h.sandbox.worker.fetch(new Request('https://test/overview'),h.env)).text();assert(overview.includes('id="popular"'));assert(!overview.includes('id="now"'));assert(!overview.includes('id="trend"'));
+assert.equal((await h.sandbox.worker.fetch(new Request('https://test/manifest.webmanifest'),h.env)).status,200);
+assert.equal((await h.sandbox.worker.fetch(new Request('https://test/sw.js'),h.env)).status,200);
 const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));assert.equal(config.d1_databases[0].database_id,'b8a840b8-1fe2-4dbf-b8ce-5c7981a0a18b');assert.equal(config.triggers.crons.length,3);
 console.log('PASS: observation boundaries, raw zero preservation, retry/error/duplicate handling, HTML script, chart, closure UI, DB binding and cron config');
+
