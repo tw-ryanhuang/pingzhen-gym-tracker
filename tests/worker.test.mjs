@@ -1,0 +1,29 @@
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const source=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+function harness(ms,responses,existing=false){
+ const writes=[];let calls=0;
+ class FixedDate extends Date{constructor(...a){super(...(a.length?a:[ms]));}static now(){return ms;}}
+ const sandbox={Date:FixedDate,Response,Request,URL,AbortSignal,console,setTimeout:f=>{f();return 1},fetch:async()=>{const v=responses[calls++];if(v instanceof Error)throw v;return new Response('<span id="total_num_534" data-to="'+v+'">'+v+'人</span>');}};
+ vm.createContext(sandbox);vm.runInContext(source.replace('export default {','globalThis.worker = {'),sandbox);
+ const DB={prepare(sql){return {bind(...values){this.values=values;return this},async run(){writes.push({sql,values:this.values});return {meta:{changes:existing?0:1}}},async all(){return {results:[]}}}},async batch(){return [[],[],[],[],[]].map(results=>({results}));}};
+ return {sandbox,writes,env:{DB},calls:()=>calls,run:()=>sandbox.collect({DB},ms)};
+}
+const at=s=>Date.parse('2026-11-11T'+s+'+08:00');
+for(const time of ['05:50:00','05:55:00','22:00:00','22:05:00','22:15:00']){const h=harness(at(time),[9]);await h.run();assert.equal(h.writes[0].values[7],'observation');assert.equal(h.writes[0].values[6],9);}
+for(const time of ['05:45:00','22:10:00','23:00:00']){const h=harness(at(time),[9]);await h.run();assert.equal(h.calls(),0);}
+for(const time of ['06:00:00','21:55:00']){const h=harness(at(time),[19]);await h.run();assert.equal(h.writes[0].values[7],'ok');}
+const zero=harness(at('07:15:00'),[0,19]);await zero.run();assert.equal(zero.writes[0].values[6],0);assert.equal(zero.writes[0].values[7],'zero_unverified');assert.equal(JSON.parse(zero.writes[1].values[0]).retry.count,19);assert(!zero.writes[1].sql.includes('SET count'));
+const bad=harness(at('07:15:00'),[0,new Error('timeout')]);await bad.run();assert.equal(JSON.parse(bad.writes[1].values[0]).retry.status,'error');assert.equal(bad.writes[0].values[6],0);
+const dupe=harness(at('07:15:00'),[0],true);await dupe.run();assert.equal(dupe.writes.length,1);assert.equal(dupe.calls(),1);
+const err=harness(at('07:15:00'),[new Error('offline')]);await err.run();assert.equal(err.writes[0].values[6],null);assert.equal(err.writes[0].values[7],'error');
+const h=harness(at('07:15:00'),[]);const response=await h.sandbox.worker.fetch(new Request('https://test/'),h.env);assert.equal(response.status,200);const html=await response.text();const script=html.match(/<\/script><script>([\s\S]*?)<\/script>/)[1];new vm.Script(script);assert(html.includes('今天的人數走勢'));assert(html.includes('zero_recheck'));assert(html.includes('location.reload()'));
+assert.equal((await h.sandbox.worker.fetch(new Request('https://test/',{method:'POST'}),h.env)).status,405);
+// Exercise generated browser code without a browser engine.
+class Element{constructor(){this.children=[];this.textContent='';this.value='';this.dataset={};this.style={};}append(...e){this.children.push(...e);if(!this.value&&e[0]?.value)this.value=e[0].value;}setAttribute(k,v){this[k]=v;}replaceChildren(){this.children=[];}addEventListener(){}}
+const els={};const document={hidden:false,getElementById(id){return els[id]??=new Element()},querySelector(){return els.unit??=new Element()},createElement:()=>new Element(),createElementNS:()=>new Element(),addEventListener(){}};
+const raw=JSON.parse(html.match(/type="application\/json">([\s\S]*?)<\/script>/)[1]);raw.now=at('23:00:00');raw.today=[{slot:new Date(at('06:00:00')).toISOString(),fetched_at:new Date(at('06:00:00')).toISOString(),hour:6,minute:0,count:9,status:'ok'}];raw.latest=raw.today;document.getElementById('data').textContent=JSON.stringify(raw);
+vm.runInNewContext(script,{document,window:{addEventListener(){}},location:{reload(){}},setInterval(){},Date,Map,Set,JSON,Math,String,Number});assert.equal(els.count.textContent,'已閉館');assert(els.unit.hidden);assert.equal(els['today-chart'].children.length,1);assert.equal(els.chart.children.length,32);
+const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));assert.equal(config.d1_databases[0].database_id,'b8a840b8-1fe2-4dbf-b8ce-5c7981a0a18b');assert.equal(config.triggers.crons.length,3);
+console.log('PASS: observation boundaries, raw zero preservation, retry/error/duplicate handling, HTML script, chart, closure UI, DB binding and cron config');

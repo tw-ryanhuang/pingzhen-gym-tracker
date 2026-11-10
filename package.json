@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "check": "node --check src/worker.js",
-    "deploy": "npm run check && node scripts/deploy.mjs"
+    "deploy": "npm run check && npm test && node scripts/deploy.mjs",
+    "test": "node tests/worker.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
