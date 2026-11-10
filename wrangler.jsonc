@@ -1,0 +1,21 @@
+{
+  "name": "pingzhen-gym-tracker",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": [
+      "*/5 0-13,22-23 * * *"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pingzhen-gym",
+      "database_id": "REQUIRED_EXISTING_D1_DATABASE_ID"
+    }
+  ]
+}
