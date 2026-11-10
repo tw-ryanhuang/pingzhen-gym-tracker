@@ -35,7 +35,7 @@ $('health-text').textContent=closed?'今天已設定休館，不預期正常採�
 const suspect=D.today.filter(r=>r.hour>=6&&r.hour<22&&r.status!=='ok').length;
 $('health-text').textContent+=' 今日另有 '+suspect+' 筆非正常紀錄（含零人待確認、失敗或延遲）。';
 function detailText(raw){try{const x=JSON.parse(raw);if(x.kind==='zero_recheck')return '首次 0 人；'+fmt(x.retry.at)+' 複查：'+(x.retry.status==='ok'?x.retry.count+' 人':x.retry.error)+'（原始值保留，複查不納入統計）';}catch{}return raw||'';}
-for(const r of D.latest){const e=document.createElement('div');e.className='log';e.textContent=fmt(r.fetched_at)+' · '+(r.count??'—')+' 人 · '+(labels[r.status]||r.status)+(r.detail?'：'+detailText(r.detail):'');$('logs').append(e);}
+for(const r of D.latest.slice(0,20)){const e=document.createElement('div');e.className='log';e.textContent=fmt(r.fetched_at)+' · '+(r.count??'—')+' 人 · '+(labels[r.status]||r.status)+(r.detail?'：'+detailText(r.detail):'');$('logs').append(e);}
 if(!D.latest.length)$('logs').textContent='尚無資料';
 const pairMap=new Map(history.map(r=>[r.local_date+'-'+r.bucket,r]));
 function hourStats(b){const values=[];for(const r of history){if(r.weekday!==weekday||r.bucket!==b)continue;const next=pairMap.get(r.local_date+'-'+(b+1));if(next)values.push((r.mean+next.mean)/2);}return values.length>=3?summary(values):null;}
@@ -81,9 +81,6 @@ function connection(){const offline=offlineSnapshot||!navigator.onLine;const ban
 connection();
 function refreshIfDue(){if(navigator.onLine&&!document.hidden&&Date.now()-loadedAt>=300000){loadedAt=Date.now();location.reload();}}
 setInterval(refreshIfDue,30000);document.addEventListener('visibilitychange',refreshIfDue);window.addEventListener('pageshow',refreshIfDue);window.addEventListener('offline',connection);window.addEventListener('online',()=>location.reload());
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{ $('install-note').textContent='離線功能未啟用；仍可正常瀏覽報表。'; });
-let installPrompt=null;
-window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;$('install-button').hidden=false;});
-$('install-button').onclick=async()=>{if(installPrompt){await installPrompt.prompt();installPrompt=null;$('install-button').hidden=true;}};
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{ console.warn('離線功能未啟用'); });
 
 `;
