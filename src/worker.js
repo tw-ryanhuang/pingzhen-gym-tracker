@@ -1,3 +1,4 @@
+import {EFFECTIVE_SAMPLES,displaySample} from './readings.js';
 import {render} from './ui/pages.js';
 import {pwaResponse} from './pwa.js';
 const SOURCE = 'https://pzsc.chanchao.com.tw/';
@@ -63,19 +64,19 @@ export default {
     try {
       const since=date(Date.now()-55*86400000);
       if(path==='/export.csv') {
-        const {results}=await env.DB.prepare('SELECT * FROM samples WHERE local_date>=? ORDER BY slot DESC').bind(since).all();
-        const cols=['slot','fetched_at','local_date','weekday','hour','minute','count','status','detail'];
+        const {results}=await env.DB.prepare(EFFECTIVE_SAMPLES+' SELECT * FROM effective_samples WHERE local_date>=? ORDER BY slot DESC').bind(since).all();
+        const cols=['slot','fetched_at','local_date','weekday','hour','minute','count','status','detail','effective_count','effective_status','effective_at'];
         const cell=v=>'"'+String(v??'').replaceAll('"','""')+'"';
         return new Response('\ufeff'+[cols.join(','),...results.map(r=>cols.map(c=>cell(r[c])).join(','))].join('\r\n'),{headers:{...HEADERS,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="pingzhen.csv"'}});
       }
       const [recent,stats,daily,today,observations]=await env.DB.batch([
-        env.DB.prepare('SELECT * FROM samples ORDER BY slot DESC LIMIT 24'),
+        env.DB.prepare(EFFECTIVE_SAMPLES+' SELECT * FROM effective_samples ORDER BY slot DESC LIMIT 24'),
         env.DB.prepare('SELECT status,COUNT(*) AS n FROM samples WHERE local_date>=? GROUP BY status').bind(since),
-        env.DB.prepare("SELECT weekday,(hour*2+CAST(minute/30 AS INTEGER)) AS bucket,local_date,AVG(count) AS mean FROM samples WHERE local_date>=? AND status='ok' AND hour>=6 AND hour<22 GROUP BY local_date,weekday,bucket HAVING COUNT(*)>=5").bind(since),
-        env.DB.prepare('SELECT * FROM samples WHERE local_date=? ORDER BY slot').bind(date(Date.now())),
+        env.DB.prepare(EFFECTIVE_SAMPLES+" SELECT weekday,(hour*2+CAST(minute/30 AS INTEGER)) AS bucket,local_date,AVG(effective_count) AS mean FROM effective_samples WHERE local_date>=? AND effective_status='ok' AND hour>=6 AND hour<22 GROUP BY local_date,weekday,bucket HAVING COUNT(*)>=5").bind(since),
+        env.DB.prepare(EFFECTIVE_SAMPLES+' SELECT * FROM effective_samples WHERE local_date=? ORDER BY slot').bind(date(Date.now())),
         env.DB.prepare('SELECT * FROM samples WHERE local_date>=? AND (hour<6 OR hour>=22 OR (hour=6 AND minute<=5)) ORDER BY slot DESC LIMIT 32').bind(date(Date.now()-86400000))
       ]);
-      return new Response(render(recent.results,stats.results,daily.results,today.results,(env.CLOSED_DATES||'').split(',').map(s=>s.trim()),observations.results,path==='/overview'?'overview':'today'),{headers:{...HEADERS,'Content-Type':'text/html; charset=utf-8'}});
+      return new Response(render(recent.results.map(displaySample),stats.results,daily.results,today.results.map(displaySample),(env.CLOSED_DATES||'').split(',').map(s=>s.trim()),observations.results,path==='/overview'?'overview':'today'),{headers:{...HEADERS,'Content-Type':'text/html; charset=utf-8'}});
     } catch {return new Response('資料讀取失敗，請確認 D1 綁定名稱為 DB，且 samples 資料表已建立。',{status:503,headers:HEADERS});}
   }
 };
